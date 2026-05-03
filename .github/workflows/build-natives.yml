@@ -1,8 +1,17 @@
 name: build-natives
-# Builds the MaterialXC native shim for linux-x64, win-x64, and osx-x64 on the
-# matching GitHub-hosted runner. Each job fetches the upstream MaterialX SDK
-# release, configures CMake, builds, and uploads the resulting shared library
-# as a workflow artifact.
+# Produces the MaterialXC native shim (libMaterialXC.{so,dylib} / MaterialXC.dll)
+# for every supported runtime identifier and uploads each binary as a workflow
+# artifact named MaterialXC-<rid>.
+#
+# Per-RID SDK acquisition strategy:
+#   linux-x64, win-x64, osx-arm64 - download the matching prebuilt MaterialX
+#     SDK release zip from AcademySoftwareFoundation/MaterialX.
+#   osx-x64                       - build MaterialX from source on an Intel
+#     macOS runner; no Intel-macOS prebuilt SDK is published upstream.
+#
+# CMake then statically links the resulting MaterialX archives into the
+# MaterialXC shared library, which is the only native artifact P/Invoked by
+# MaterialX.Net.
 on:
   workflow_dispatch:
     inputs:
@@ -14,6 +23,7 @@ on:
     paths:
       - "native/MaterialXC/**"
       - "scripts/fetch-materialx-sdk.sh"
+      - "scripts/build-materialx-from-source.sh"
       - ".github/workflows/build-natives.yml"
 env:
   MATERIALX_VERSION: ${{ inputs.materialx_version || '1.39.4' }}
@@ -22,6 +32,25 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
+        # Per-RID build descriptor consumed by the steps below:
+        #   os               - GitHub-hosted runner image.
+        #   rid              - .NET runtime identifier; also names the output
+        #                      directory under runtimes/<rid>/native/ and the
+        #                      uploaded artifact (MaterialXC-<rid>).
+        #   sdk              - Folder under runtimes/ that holds the MaterialX
+        #                      include/ + lib/ tree; passed to CMake as
+        #                      -DMATERIALX_SDK_DIR. For prebuilt RIDs this is
+        #                      the upstream release zip name; for from-source
+        #                      RIDs it is the staging directory written by
+        #                      scripts/build-materialx-from-source.sh.
+        #   sdk_from_source  - When true, build MaterialX from source instead
+        #                      of downloading a prebuilt release.
+        #   sdk_osx_arch     - Apple architecture passed to the source build
+        #                      (CMAKE_OSX_ARCHITECTURES).
+        #   artifact         - Final shared-library filename for the platform.
+        #   cmake_extra      - Extra arguments appended to the configure step.
+        #   artifact_path    - Path of the freshly built shared library inside
+        #                      native/MaterialXC/, relative to that directory.
         include:
           - os: ubuntu-latest
             rid: linux-x64
@@ -36,36 +65,69 @@ jobs:
             cmake_extra: -G "Visual Studio 17 2022" -A x64
             artifact_path: build/win-x64/Release/MaterialXC.dll
           - os: macos-latest
+            # macos-latest is an Apple Silicon image; the prebuilt
+            # MaterialX_MacOS_Xcode_16_Python313 SDK contains arm64-only static
+            # archives, which matches this RID exactly.
             rid: osx-arm64
             sdk: MaterialX_MacOS_Xcode_16_Python313
             artifact: libMaterialXC.dylib
-            # Upstream MaterialX_MacOS_Xcode_16_Python313 ships arm64-only static
-            # archives, so we build osx-arm64 here. (macos-latest runners are
-            # Apple Silicon as of 2024.)
             cmake_extra: -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
             artifact_path: build/osx-arm64/libMaterialXC.dylib
+          - os: macos-13
+            # macos-13 is the last GitHub-hosted Intel macOS image. MaterialX
+            # has no Intel-macOS prebuilt release, so this job builds MaterialX
+            # itself from source (sdk_from_source: true) into a staging tree
+            # whose layout matches the prebuilt SDK zips, then links MaterialXC
+            # against it the same way as every other RID.
+            rid: osx-x64
+            sdk: MaterialX_SourceBuild_osx-x64
+            sdk_from_source: true
+            sdk_osx_arch: x86_64
+            artifact: libMaterialXC.dylib
+            cmake_extra: -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64
+            artifact_path: build/osx-x64/libMaterialXC.dylib
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - name: Fetch MaterialX SDK
+
+      # Mutually exclusive SDK acquisition: exactly one of the next two steps
+      # runs per job, selected by matrix.sdk_from_source. Both populate
+      # runtimes/${{ matrix.sdk }}/ with an include/ + lib/ tree consumable by
+      # native/MaterialXC/CMakeLists.txt via -DMATERIALX_SDK_DIR.
+      - name: Fetch MaterialX SDK (prebuilt release)
+        if: ${{ !matrix.sdk_from_source }}
         shell: bash
         run: scripts/fetch-materialx-sdk.sh "${{ matrix.sdk }}" "$MATERIALX_VERSION"
-      - name: Configure
+      - name: Build MaterialX SDK from source
+        if: ${{ matrix.sdk_from_source }}
+        shell: bash
+        run: scripts/build-materialx-from-source.sh "${{ matrix.rid }}" "$MATERIALX_VERSION" "${{ matrix.sdk_osx_arch }}"
+
+      # Configure MaterialXC against the SDK staged above. The build directory
+      # is namespaced by RID so concurrent matrix jobs sharing a workspace
+      # cache never collide.
+      - name: Configure MaterialXC
         working-directory: native/MaterialXC
         shell: bash
         run: |
           cmake -S . -B "build/${{ matrix.rid }}" \
             -DMATERIALX_SDK_DIR="$PWD/../../runtimes/${{ matrix.sdk }}" \
             ${{ matrix.cmake_extra }}
-      - name: Build
+
+      - name: Build MaterialXC
         working-directory: native/MaterialXC
         run: cmake --build "build/${{ matrix.rid }}" --config Release -j
-      - name: Stage artifact
+
+      # Mirror the freshly built shared library into the package layout
+      # (runtimes/<rid>/native/<artifact>) that MaterialX.Net.csproj globs into
+      # the produced NuGet package.
+      - name: Stage artifact into runtimes/<rid>/native/
         working-directory: native/MaterialXC
         shell: bash
         run: |
           mkdir -p "../../runtimes/${{ matrix.rid }}/native"
           cp "${{ matrix.artifact_path }}" "../../runtimes/${{ matrix.rid }}/native/${{ matrix.artifact }}"
+
       - uses: actions/upload-artifact@v4
         with:
           name: MaterialXC-${{ matrix.rid }}

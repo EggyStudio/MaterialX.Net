@@ -16,10 +16,13 @@ cmake --build build/linux-x64 --config Release -j
 cp build/linux-x64/libMaterialXC.so ../../runtimes/linux-x64/native/
 ```
 Toolchain: `gcc-c++` (or `clang`), CMake >= 3.20, `make`, `curl`, `tar`.
-## All three RIDs via GitHub Actions (recommended for win-x64 and osx-arm64)
+## All RIDs via GitHub Actions (recommended for win-x64, osx-arm64, osx-x64)
 `.github/workflows/build-natives.yml` builds each RID on its native runner
-(`ubuntu-latest`, `windows-latest`, `macos-latest`), fetches the matching
-MaterialX SDK release, and uploads each binary as a workflow artifact.
+(`ubuntu-latest`, `windows-latest`, `macos-latest`, `macos-13`), fetches the
+matching MaterialX SDK release - or, for `osx-x64`, builds MaterialX itself
+from source via `scripts/build-materialx-from-source.sh` because no Intel
+macOS prebuilt SDK exists upstream - then configures CMake, builds, and
+uploads each binary as a workflow artifact.
 Trigger the workflow:
 ```sh
 git push                      # auto-runs on changes under native/MaterialXC/**
@@ -30,6 +33,7 @@ Download the produced binaries into the package layout:
 gh run download --name MaterialXC-linux-x64  --dir runtimes/linux-x64/native
 gh run download --name MaterialXC-win-x64    --dir runtimes/win-x64/native
 gh run download --name MaterialXC-osx-arm64  --dir runtimes/osx-arm64/native
+gh run download --name MaterialXC-osx-x64    --dir runtimes/osx-x64/native
 ```
 (`gh` is the GitHub CLI: `sudo dnf install -y gh && gh auth login`.)
 ## Integration
