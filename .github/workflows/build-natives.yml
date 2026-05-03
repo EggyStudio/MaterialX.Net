@@ -27,6 +27,11 @@ on:
       - ".github/workflows/build-natives.yml"
 env:
   MATERIALX_VERSION: ${{ inputs.materialx_version || '1.39.4' }}
+  # Run JavaScript-based actions (actions/checkout, actions/upload-artifact, ...)
+  # on Node.js 24 instead of the deprecated Node.js 20 runtime that GitHub
+  # removes from runners on 2026-09-16. Opting in early silences the
+  # "Node.js 20 actions are deprecated" warning emitted by every job.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 jobs:
   build:
     strategy:
