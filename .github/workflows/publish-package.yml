@@ -1,0 +1,148 @@
+name: publish-package
+# Packs MaterialX.Net into a NuGet package and publishes it to GitHub Packages
+# (https://github.com/EggyStudio/MaterialX.Net/packages) so each successful
+# native build produces a downloadable, versioned package.
+#
+# Versioning:
+#   The csproj <Version> only encodes the base "major.minor" we want to ship
+#   (parsed below); the patch component is replaced with ${{ github.run_number }}
+#   so every run of this workflow yields a strictly increasing version like
+#   0.1.<run_number>. No commits back to the repo are needed - the bumped
+#   version is injected via /p:Version=... at pack time.
+#
+# Trigger model:
+#   - workflow_run: fires automatically after build-natives finishes on main,
+#     so a fresh nupkg is published whenever new native shims land.
+#   - workflow_dispatch: lets you republish on demand; you can optionally pin
+#     to a specific build-natives run id whose artifacts should be consumed.
+on:
+  workflow_run:
+    workflows: [ "build-natives" ]
+    types: [ completed ]
+    branches: [ main ]
+  workflow_dispatch:
+    inputs:
+      build_natives_run_id:
+        description: "build-natives run id to pull native artifacts from (defaults to latest successful run on main)"
+        required: false
+        default: ""
+
+# GitHub Packages requires packages:write on GITHUB_TOKEN; contents:read is
+# enough for actions/checkout. Everything else stays at the default (none).
+permissions:
+  contents: read
+  packages: write
+  actions: read
+
+env:
+  DOTNET_NOLOGO: "true"
+  DOTNET_CLI_TELEMETRY_OPTOUT: "true"
+  # See build-natives.yml for the rationale; keeps upload/download-artifact@v5
+  # quiet about Node 20 deprecation until upstream ships a Node 24 release.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
+jobs:
+  publish:
+    # Skip auto-runs that were triggered by a failed build-natives - only
+    # workflow_dispatch and successful upstream runs should publish.
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "10.0.x"
+
+      # Resolve which build-natives run to pull native shims from. For
+      # workflow_run triggers we always use the run that fired this workflow.
+      # For workflow_dispatch we honour an explicit input if given, else the
+      # latest successful build-natives run on main.
+      - name: Resolve build-natives run id
+        id: resolve
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_run" ]; then
+            run_id="${{ github.event.workflow_run.id }}"
+          elif [ -n "${{ inputs.build_natives_run_id }}" ]; then
+            run_id="${{ inputs.build_natives_run_id }}"
+          else
+            run_id="$(gh run list \
+              --workflow build-natives.yml \
+              --branch main \
+              --status success \
+              --limit 1 \
+              --json databaseId \
+              --jq '.[0].databaseId')"
+          fi
+          if [ -z "$run_id" ] || [ "$run_id" = "null" ]; then
+            echo "Could not resolve a build-natives run id." >&2
+            exit 1
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "Using build-natives run id: $run_id"
+
+      # Download every MaterialXC-<rid> artifact produced by that run and
+      # stage them under runtimes/<rid>/native/ so MaterialX.Net.csproj packs
+      # them into the runtimes/ folder of the nupkg.
+      - name: Download native artifacts
+        uses: actions/download-artifact@v5
+        with:
+          pattern: MaterialXC-*
+          path: artifacts
+          run-id: ${{ steps.resolve.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+
+      - name: Stage native artifacts into runtimes/<rid>/native/
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for dir in artifacts/MaterialXC-*; do
+            rid="${dir#artifacts/MaterialXC-}"
+            mkdir -p "runtimes/$rid/native"
+            cp -v "$dir"/* "runtimes/$rid/native/"
+          done
+          echo "Staged runtimes:"
+          find runtimes -mindepth 2 -maxdepth 3 -type f \
+            \( -name 'MaterialXC.dll' -o -name 'libMaterialXC.so' -o -name 'libMaterialXC.dylib' \) | sort
+
+      # Compute the published version. Reads "major.minor" from the csproj
+      # <Version>, ignores its patch component, then appends github.run_number
+      # so the value is monotonically increasing across runs without ever
+      # touching tracked files.
+      - name: Compute package version
+        id: version
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="$(grep -oPm1 '(?<=<Version>)[^<]+' MaterialX.Net.csproj)"
+          major_minor="$(echo "$base" | awk -F. '{ printf "%s.%s", $1, $2 }')"
+          version="${major_minor}.${{ github.run_number }}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Publishing MaterialX.Net version: $version"
+
+      # `dotnet pack` from the project root performs restore+build+pack in
+      # one shot; -p:Version overrides the csproj <Version> with the bumped
+      # value computed above, and the produced nupkg lands in bin/Release/.
+      - name: Pack
+        run: dotnet pack -c Release -p:Version=${{ steps.version.outputs.version }}
+
+      - uses: actions/upload-artifact@v5
+        with:
+          name: MaterialX.Net-nupkg-${{ steps.version.outputs.version }}
+          path: bin/Release/*.nupkg
+
+      # Publish to GitHub Packages. --skip-duplicate makes re-runs idempotent
+      # if a given version was already pushed (e.g. manual republish of an
+      # older build-natives run).
+      - name: Push to GitHub Packages
+        run: |
+          dotnet nuget push "bin/Release/*.nupkg" \
+            --source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json" \
+            --api-key "${{ secrets.GITHUB_TOKEN }}" \
+            --skip-duplicate
