@@ -85,7 +85,9 @@ WebGPU.
 
 ## Building the native shim
 
-The package ships pre-built shims for `win-x64`, `linux-x64`, and `osx-x64`. To
+The package ships pre-built shims for `win-x64`, `linux-x64`, and `osx-arm64`
+(Apple Silicon; Intel Macs are not supported because the upstream MaterialX
+SDK we statically link against ships arm64-only archives). To
 rebuild them from source against the upstream MaterialX SDKs (checked in under
 `runtimes/MaterialX_*_Python313/`), see [`native/MaterialXC/README.md`](native/MaterialXC/README.md).
 
