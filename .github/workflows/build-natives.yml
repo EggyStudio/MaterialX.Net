@@ -27,6 +27,13 @@ on:
       - ".github/workflows/build-natives.yml"
 env:
   MATERIALX_VERSION: ${{ inputs.materialx_version || '1.39.4' }}
+  # actions/upload-artifact@v5 still declares Node.js 20 in its action.yml
+  # (no Node 24-native release published yet, tracked upstream in
+  # actions/upload-artifact#710). Opt the runner into running such actions on
+  # Node.js 24 to avoid the deprecation warning ahead of GitHub's 2026-06-02
+  # default switch and the 2026-09-16 Node 20 removal. Remove this once
+  # upload-artifact ships a release whose action.yml uses runs.using: node24.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 jobs:
   build:
     strategy:
