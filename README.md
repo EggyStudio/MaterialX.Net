@@ -1,3 +1,5 @@
+![header.png](.github/assets/header.png)
+
 # MaterialX.Net
 
 A single-package .NET binding for [MaterialX](https://materialx.org/) - the open
