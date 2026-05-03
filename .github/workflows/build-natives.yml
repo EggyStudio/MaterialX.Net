@@ -6,8 +6,9 @@ name: build-natives
 # Per-RID SDK acquisition strategy:
 #   linux-x64, win-x64, osx-arm64 - download the matching prebuilt MaterialX
 #     SDK release zip from AcademySoftwareFoundation/MaterialX.
-#   osx-x64                       - build MaterialX from source on an Intel
-#     macOS runner; no Intel-macOS prebuilt SDK is published upstream.
+#   osx-x64                       - cross-compile MaterialX from source on the
+#     Apple Silicon macOS runner (Intel macos-13 hosted runners were retired
+#     in 2026); no Intel-macOS prebuilt SDK is published upstream either.
 #
 # CMake then statically links the resulting MaterialX archives into the
 # MaterialXC shared library, which is the only native artifact P/Invoked by
@@ -80,12 +81,15 @@ jobs:
             artifact: libMaterialXC.dylib
             cmake_extra: -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
             artifact_path: build/osx-arm64/libMaterialXC.dylib
-          - os: macos-13
-            # macos-13 is the last GitHub-hosted Intel macOS image. MaterialX
-            # has no Intel-macOS prebuilt release, so this job builds MaterialX
-            # itself from source (sdk_from_source: true) into a staging tree
-            # whose layout matches the prebuilt SDK zips, then links MaterialXC
-            # against it the same way as every other RID.
+          - os: macos-latest
+            # GitHub-hosted Intel macOS runners (macos-13) were retired in
+            # 2026, so the osx-x64 shim is cross-compiled on the Apple Silicon
+            # runner: Xcode bundles the x86_64 SDK and clang toolchain, and
+            # CMAKE_OSX_ARCHITECTURES=x86_64 (passed both to the from-source
+            # MaterialX build and to MaterialXC's configure step) produces a
+            # valid x86_64 Mach-O dylib. The resulting binary can't execute on
+            # the arm64 build host, but that is irrelevant - we only need to
+            # upload it as an artifact.
             rid: osx-x64
             sdk: MaterialX_SourceBuild_osx-x64
             sdk_from_source: true
