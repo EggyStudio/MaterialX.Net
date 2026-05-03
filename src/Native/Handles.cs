@@ -46,3 +46,18 @@ public sealed class OutputHandle : MaterialXHandle
     protected override bool ReleaseHandle() { MaterialXNative.mx_output_release(handle); return true; }
 }
 
+public sealed class ShaderGeneratorHandle : MaterialXHandle
+{
+    protected override bool ReleaseHandle() { MaterialXNative.mx_shadergen_release(handle); return true; }
+}
+
+public sealed class GenContextHandle : MaterialXHandle
+{
+    protected override bool ReleaseHandle() { MaterialXNative.mx_gencontext_release(handle); return true; }
+}
+
+public sealed class ShaderHandle : MaterialXHandle
+{
+    protected override bool ReleaseHandle() { MaterialXNative.mx_shader_release(handle); return true; }
+}
+

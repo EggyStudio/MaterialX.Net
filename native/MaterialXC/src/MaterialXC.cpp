@@ -16,6 +16,19 @@
 #include <MaterialXFormat/File.h>
 #include <MaterialXFormat/Util.h>
 
+#include <MaterialXGenShader/Shader.h>
+#include <MaterialXGenShader/ShaderStage.h>
+#include <MaterialXGenShader/ShaderGenerator.h>
+#include <MaterialXGenShader/HwShaderGenerator.h>
+#include <MaterialXGenShader/GenContext.h>
+#include <MaterialXGenShader/Util.h>
+#include <MaterialXGenShader/TypeDesc.h>
+
+#include <MaterialXGenGlsl/GlslShaderGenerator.h>
+#include <MaterialXGenGlsl/EsslShaderGenerator.h>
+#include <MaterialXGenGlsl/VkShaderGenerator.h>
+#include <MaterialXGenGlsl/WgslShaderGenerator.h>
+
 #include <exception>
 #include <string>
 #include <cstring>
@@ -251,5 +264,105 @@ extern "C" MX_API mx_status mx_input_connect_to_node(mx_input_t in, const char* 
         if (output_name && *output_name) (*in)->setOutputString(output_name);
         return MX_OK;
     } catch (const std::exception& e) { return reportException(e); }
+}
+
+// ===================================================================
+// Renderable discovery
+// ===================================================================
+
+extern "C" MX_API int32_t mx_document_renderable_count(mx_document_t doc) {
+    if (!doc) return 0;
+    try { return (int32_t)mx::findRenderableElements(*doc).size(); }
+    catch (const std::exception& e) { reportException(e); return 0; }
+}
+
+extern "C" MX_API mx_element_t mx_document_renderable_at(mx_document_t doc, int32_t index) {
+    if (!doc) return nullptr;
+    try {
+        auto elements = mx::findRenderableElements(*doc);
+        if (index < 0 || index >= (int32_t)elements.size()) return nullptr;
+        return new mx_element_s(elements[index]);
+    } catch (const std::exception& e) { reportException(e); return nullptr; }
+}
+
+// ===================================================================
+// Shader code generation (GLSL family)
+// ===================================================================
+
+struct mx_shadergen_s  : mx::ShaderGeneratorPtr { mx_shadergen_s(mx::ShaderGeneratorPtr p) : mx::ShaderGeneratorPtr(std::move(p)) {} };
+struct mx_gencontext_s { std::shared_ptr<mx::GenContext> ctx; };
+struct mx_shader_s     : mx::ShaderPtr           { mx_shader_s(mx::ShaderPtr p)           : mx::ShaderPtr(std::move(p))          {} };
+
+extern "C" MX_API mx_shadergen_t mx_shadergen_create(mx_shader_target target) {
+    try {
+        mx::ShaderGeneratorPtr gen;
+        switch (target) {
+            case MX_SHADER_TARGET_GLSL400: gen = mx::GlslShaderGenerator::create(); break;
+            case MX_SHADER_TARGET_ESSL300: gen = mx::EsslShaderGenerator::create(); break;
+            case MX_SHADER_TARGET_VULKAN:  gen = mx::VkShaderGenerator::create();   break;
+            case MX_SHADER_TARGET_WGSL:    gen = mx::WgslShaderGenerator::create(); break;
+            default: reportError("unknown shader target", MX_ERR_INVALID_ARG); return nullptr;
+        }
+        return new mx_shadergen_s(gen);
+    } catch (const std::exception& e) { reportException(e); return nullptr; }
+}
+
+extern "C" MX_API void mx_shadergen_release(mx_shadergen_t g) { delete g; }
+
+extern "C" MX_API const char* mx_shadergen_target_name(mx_shadergen_t g) {
+    if (!g) return "";
+    try { return setStr((*g)->getTarget()); }
+    catch (const std::exception& e) { reportException(e); return ""; }
+}
+
+extern "C" MX_API mx_gencontext_t mx_gencontext_create(mx_shadergen_t g) {
+    if (!g) { reportError("generator is null", MX_ERR_INVALID_ARG); return nullptr; }
+    try {
+        auto* h = new mx_gencontext_s;
+        h->ctx = std::make_shared<mx::GenContext>(*g);
+        return h;
+    } catch (const std::exception& e) { reportException(e); return nullptr; }
+}
+
+extern "C" MX_API void mx_gencontext_release(mx_gencontext_t c) { delete c; }
+
+extern "C" MX_API mx_status mx_gencontext_add_source_search_path(mx_gencontext_t c, const char* path) {
+    if (!c || !path) return reportError("ctx/path is null", MX_ERR_INVALID_ARG);
+    try { c->ctx->registerSourceCodeSearchPath(mx::FilePath(path)); return MX_OK; }
+    catch (const std::exception& e) { return reportException(e); }
+}
+
+extern "C" MX_API mx_shader_t mx_shadergen_generate(mx_shadergen_t g, const char* name, mx_element_t element, mx_gencontext_t ctx) {
+    if (!g || !element || !ctx) { reportError("generator/element/ctx is null", MX_ERR_INVALID_ARG); return nullptr; }
+    try {
+        std::string shaderName = (name && *name) ? std::string(name) : std::string("Shader");
+        mx::ShaderPtr s = (*g)->generate(shaderName, *element, *ctx->ctx);
+        if (!s) { reportError("shader generation returned null", MX_ERR_INTERNAL); return nullptr; }
+        return new mx_shader_s(s);
+    } catch (const std::exception& e) { reportException(e); return nullptr; }
+}
+
+extern "C" MX_API void mx_shader_release(mx_shader_t s) { delete s; }
+
+extern "C" MX_API int32_t mx_shader_stage_count(mx_shader_t s) {
+    if (!s) return 0;
+    try { return (int32_t)(*s)->numStages(); }
+    catch (const std::exception& e) { reportException(e); return 0; }
+}
+
+extern "C" MX_API const char* mx_shader_stage_name_at(mx_shader_t s, int32_t index) {
+    if (!s) return "";
+    try {
+        if (index < 0 || index >= (int32_t)(*s)->numStages()) return "";
+        return setStr((*s)->getStage((size_t)index).getName());
+    } catch (const std::exception& e) { reportException(e); return ""; }
+}
+
+extern "C" MX_API const char* mx_shader_get_source_code(mx_shader_t s, const char* stage_name) {
+    if (!s) return "";
+    try {
+        std::string stage = stage_name ? stage_name : "";
+        return setStr((*s)->getSourceCode(stage));
+    } catch (const std::exception& e) { reportException(e); return ""; }
 }
 

@@ -45,9 +45,10 @@ target_include_directories(MaterialXC
 
 target_compile_definitions(MaterialXC PRIVATE MATERIALXC_BUILDING)
 
-# Link the static MaterialX core + format archives. Name pattern differs across
-# platforms (lib*.a vs *.lib); CMake's find_library handles both.
-foreach(_mxlib MaterialXFormat MaterialXCore)
+# Link the static MaterialX archives. Order matters for static linking on
+# Linux: a library must appear before any other library that depends on it,
+# i.e. higher-level (Gen*) before lower-level (Format / Core).
+foreach(_mxlib MaterialXGenGlsl MaterialXGenShader MaterialXFormat MaterialXCore)
     find_library(MX_${_mxlib}_LIB
         NAMES ${_mxlib}
         PATHS ${MX_LIB}

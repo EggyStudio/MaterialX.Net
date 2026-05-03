@@ -137,6 +137,26 @@ public sealed class Document : IDisposable
         }
     }
 
+    /// <summary>
+    /// Renderable elements of the document (materials, shaders, output graph
+    /// nodes) - the candidate inputs for <see cref="ShaderGenerator.Generate"/>.
+    /// </summary>
+    public IEnumerable<Element> Renderables
+    {
+        get
+        {
+            var count = MaterialXNative.mx_document_renderable_count(Handle.Raw);
+            for (var i = 0; i < count; i++)
+            {
+                var raw = MaterialXNative.mx_document_renderable_at(Handle.Raw, i);
+                if (raw == IntPtr.Zero) continue;
+                var h = new ElementHandle();
+                h.SetRaw(raw);
+                yield return new Element(h);
+            }
+        }
+    }
+
     public void Dispose() => Handle.Dispose();
 }
 

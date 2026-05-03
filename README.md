@@ -21,6 +21,8 @@ The NuGet ships:
 
 ## Quick start
 
+Build a material and write it to disk:
+
 ```csharp
 using MaterialX;
 
@@ -33,6 +35,53 @@ baseColor.SetValue(new Color3(0.8f, 0.2f, 0.1f));
 
 doc.WriteToXmlFile("out.mtlx");
 ```
+
+### Generating Vulkan GLSL (or desktop GLSL / ESSL / WGSL)
+
+Once a document has at least one renderable element (a `surfacematerial`,
+`standard_surface`, etc.), you can generate real shader source straight from
+the managed API:
+
+```csharp
+using MaterialX;
+using System.Linq;
+
+const string Mtlx = """
+<?xml version="1.0"?>
+<materialx version="1.39">
+  <standard_surface name="SR1" type="surfaceshader">
+    <input name="base_color" type="color3" value="0.8, 0.2, 0.2" />
+  </standard_surface>
+  <surfacematerial name="M1" type="material">
+    <input name="surfaceshader" type="surfaceshader" nodename="SR1" />
+  </surfacematerial>
+</materialx>
+""";
+
+using var doc = Document.ReadFromXmlString(Mtlx);
+doc.LoadStandardLibraries();
+
+// Pick a backend: Vulkan | Glsl400 | Essl300 | Wgsl
+using var gen = ShaderGenerator.Create(ShaderTarget.Vulkan);
+using var ctx = GenContext.Create(gen);
+ctx.AddStandardLibrarySearchPath(); // resolves "libraries/..." includes
+
+var renderable = doc.Renderables.First();
+using var shader = gen.Generate(renderable, ctx, "MyShader");
+
+string vertexSrc = shader.GetSourceCode(ShaderStage.Vertex);
+string pixelSrc  = shader.GetSourceCode(ShaderStage.Pixel);
+
+Console.WriteLine($"target={gen.Target} vertex={vertexSrc.Length} pixel={pixelSrc.Length}");
+```
+
+The pixel stage is the full MaterialX `standard_surface` implementation as
+Vulkan-flavored GLSL (`#version 450` + `layout(set=, binding=)` decorations on
+every UBO and sampler) - i.e. source you can feed straight into
+`glslangValidator -V` / `shaderc` to produce SPIR-V for `vkCreateShaderModule`.
+Switching `ShaderTarget` swaps backends with no other changes required:
+`Glsl400` for desktop OpenGL, `Essl300` for GLES 3 / WebGL 2, `Wgsl` for
+WebGPU.
 
 ## Building the native shim
 
