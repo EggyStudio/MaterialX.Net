@@ -27,11 +27,6 @@ on:
       - ".github/workflows/build-natives.yml"
 env:
   MATERIALX_VERSION: ${{ inputs.materialx_version || '1.39.4' }}
-  # Run JavaScript-based actions (actions/checkout, actions/upload-artifact, ...)
-  # on Node.js 24 instead of the deprecated Node.js 20 runtime that GitHub
-  # removes from runners on 2026-09-16. Opting in early silences the
-  # "Node.js 20 actions are deprecated" warning emitted by every job.
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 jobs:
   build:
     strategy:
@@ -93,7 +88,7 @@ jobs:
             artifact_path: build/osx-x64/libMaterialXC.dylib
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       # Mutually exclusive SDK acquisition: exactly one of the next two steps
       # runs per job, selected by matrix.sdk_from_source. Both populate
@@ -133,7 +128,7 @@ jobs:
           mkdir -p "../../runtimes/${{ matrix.rid }}/native"
           cp "${{ matrix.artifact_path }}" "../../runtimes/${{ matrix.rid }}/native/${{ matrix.artifact }}"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v5
         with:
           name: MaterialXC-${{ matrix.rid }}
           path: runtimes/${{ matrix.rid }}/native/${{ matrix.artifact }}
