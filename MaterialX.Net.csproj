@@ -80,6 +80,11 @@
               Pack="true" PackagePath="runtimes/osx-x64/native/"
               CopyToOutputDirectory="PreserveNewest"
               Link="runtimes/osx-x64/native/%(Filename)%(Extension)" />
+        <None Include="runtimes/osx-arm64/native/libMaterialXC.dylib"
+              Condition="Exists('runtimes/osx-arm64/native/libMaterialXC.dylib')"
+              Pack="true" PackagePath="runtimes/osx-arm64/native/"
+              CopyToOutputDirectory="PreserveNewest"
+              Link="runtimes/osx-arm64/native/%(Filename)%(Extension)" />
     </ItemGroup>
 
     <!-- MaterialX standard data libraries (XML / MTLX). RID-agnostic. -->

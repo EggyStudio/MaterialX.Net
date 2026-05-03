@@ -36,11 +36,14 @@ jobs:
             cmake_extra: -G "Visual Studio 17 2022" -A x64
             artifact_path: build/win-x64/Release/MaterialXC.dll
           - os: macos-latest
-            rid: osx-x64
+            rid: osx-arm64
             sdk: MaterialX_MacOS_Xcode_16_Python313
             artifact: libMaterialXC.dylib
-            cmake_extra: -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64
-            artifact_path: build/osx-x64/libMaterialXC.dylib
+            # Upstream MaterialX_MacOS_Xcode_16_Python313 ships arm64-only static
+            # archives, so we build osx-arm64 here. (macos-latest runners are
+            # Apple Silicon as of 2024.)
+            cmake_extra: -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=arm64
+            artifact_path: build/osx-arm64/libMaterialXC.dylib
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
