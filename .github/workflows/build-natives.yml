@@ -1,0 +1,69 @@
+name: build-natives
+# Builds the MaterialXC native shim for linux-x64, win-x64, and osx-x64 on the
+# matching GitHub-hosted runner. Each job fetches the upstream MaterialX SDK
+# release, configures CMake, builds, and uploads the resulting shared library
+# as a workflow artifact.
+on:
+  workflow_dispatch:
+    inputs:
+      materialx_version:
+        description: "MaterialX upstream release tag (without leading v)"
+        required: false
+        default: "1.39.4"
+  push:
+    paths:
+      - "native/MaterialXC/**"
+      - "scripts/fetch-materialx-sdk.sh"
+      - ".github/workflows/build-natives.yml"
+env:
+  MATERIALX_VERSION: ${{ inputs.materialx_version || '1.39.4' }}
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            sdk: MaterialX_Linux_GCC_14_Python313
+            artifact: libMaterialXC.so
+            cmake_extra: -DCMAKE_BUILD_TYPE=Release
+            artifact_path: build/linux-x64/libMaterialXC.so
+          - os: windows-latest
+            rid: win-x64
+            sdk: MaterialX_Windows_VS2022_x64_Python313
+            artifact: MaterialXC.dll
+            cmake_extra: -G "Visual Studio 17 2022" -A x64
+            artifact_path: build/win-x64/Release/MaterialXC.dll
+          - os: macos-latest
+            rid: osx-x64
+            sdk: MaterialX_MacOS_Xcode_16_Python313
+            artifact: libMaterialXC.dylib
+            cmake_extra: -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES=x86_64
+            artifact_path: build/osx-x64/libMaterialXC.dylib
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch MaterialX SDK
+        shell: bash
+        run: scripts/fetch-materialx-sdk.sh "${{ matrix.sdk }}" "$MATERIALX_VERSION"
+      - name: Configure
+        working-directory: native/MaterialXC
+        shell: bash
+        run: |
+          cmake -S . -B "build/${{ matrix.rid }}" \
+            -DMATERIALX_SDK_DIR="$PWD/../../runtimes/${{ matrix.sdk }}" \
+            ${{ matrix.cmake_extra }}
+      - name: Build
+        working-directory: native/MaterialXC
+        run: cmake --build "build/${{ matrix.rid }}" --config Release -j
+      - name: Stage artifact
+        working-directory: native/MaterialXC
+        shell: bash
+        run: |
+          mkdir -p "../../runtimes/${{ matrix.rid }}/native"
+          cp "${{ matrix.artifact_path }}" "../../runtimes/${{ matrix.rid }}/native/${{ matrix.artifact }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: MaterialXC-${{ matrix.rid }}
+          path: runtimes/${{ matrix.rid }}/native/${{ matrix.artifact }}

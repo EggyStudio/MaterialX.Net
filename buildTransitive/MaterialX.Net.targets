@@ -1,0 +1,5 @@
+<Project>
+  <!-- Transitive variant: re-imports the canonical targets file. -->
+  <Import Project="$(MSBuildThisFileDirectory)..\build\MaterialX.Net.targets" />
+</Project>
+

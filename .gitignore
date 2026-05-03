@@ -465,3 +465,7 @@ appsettings.Development.local.json
 
 # CI/CD workflows to ignore
 .github/workflows/publish-nuget.yml
+# MaterialX upstream SDK extracts (fetched on demand by scripts/fetch-materialx-sdk.sh)
+runtimes/MaterialX_*/
+# MaterialXC native build trees
+native/MaterialXC/build*/

@@ -1,0 +1,100 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>annotations</Nullable>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RootNamespace>MaterialX</RootNamespace>
+        <AssemblyName>MaterialX.Net</AssemblyName>
+
+        <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+        <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+        <EnableDefaultNoneItems>false</EnableDefaultNoneItems>
+
+        <GenerateDocumentationFile>false</GenerateDocumentationFile>
+        <NoWarn>$(NoWarn);CS1591;CS8500;CS8981;SYSLIB1054</NoWarn>
+    </PropertyGroup>
+
+    <!-- NuGet package metadata -->
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+        <PackageId>MaterialX.Net</PackageId>
+        <Version>0.1.0</Version>
+        <Description>MaterialX .NET bindings (managed wrappers + native MaterialXC C-shim) bundled in a single package, including the MaterialX standard data libraries (stdlib, pbrlib, bxdf, lights, ...).</Description>
+        <Authors>EggyStudio</Authors>
+        <Company>MaterialX.Net</Company>
+        <RepositoryType>git</RepositoryType>
+        <RepositoryUrl>https://github.com/EggyStudio/MaterialX.Net</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/EggyStudio/MaterialX.Net</PackageProjectUrl>
+        <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
+        <PackageTags>materialx;shading;usd;hydra;pbr;native</PackageTags>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <Deterministic>true</Deterministic>
+    </PropertyGroup>
+
+    <!-- Branding / docs -->
+    <ItemGroup>
+        <None Include="README.md" Pack="true" PackagePath="/" />
+    </ItemGroup>
+
+    <!-- Ship the native-relocation MSBuild logic to consumers.
+         build/<id>.targets           -> imported by direct PackageReferences
+         buildTransitive/<id>.targets -> imported by transitive PackageReferences
+                                         (it just re-imports the canonical file
+                                         under build/, single source of truth). -->
+    <ItemGroup>
+        <None Include="build/MaterialX.Net.targets"
+              Pack="true"
+              PackagePath="build/MaterialX.Net.targets" />
+        <None Include="buildTransitive/MaterialX.Net.targets"
+              Pack="true"
+              PackagePath="buildTransitive/MaterialX.Net.targets" />
+    </ItemGroup>
+
+    <!-- Import the same logic locally so this project (and its bin/ output)
+         behaves exactly like a downstream consumer. -->
+    <Import Project="build/MaterialX.Net.targets" />
+
+    <!-- All managed sources -->
+    <ItemGroup>
+        <Compile Include="src/**/*.cs" />
+    </ItemGroup>
+
+    <!-- Native MaterialXC shim per RID. Skipped when missing so the project
+         restores cleanly even before a binary has been produced. -->
+    <ItemGroup>
+        <None Include="runtimes/win-x64/native/MaterialXC.dll"
+              Condition="Exists('runtimes/win-x64/native/MaterialXC.dll')"
+              Pack="true" PackagePath="runtimes/win-x64/native/"
+              CopyToOutputDirectory="PreserveNewest"
+              Link="runtimes/win-x64/native/%(Filename)%(Extension)" />
+        <None Include="runtimes/linux-x64/native/libMaterialXC.so"
+              Condition="Exists('runtimes/linux-x64/native/libMaterialXC.so')"
+              Pack="true" PackagePath="runtimes/linux-x64/native/"
+              CopyToOutputDirectory="PreserveNewest"
+              Link="runtimes/linux-x64/native/%(Filename)%(Extension)" />
+        <None Include="runtimes/osx-x64/native/libMaterialXC.dylib"
+              Condition="Exists('runtimes/osx-x64/native/libMaterialXC.dylib')"
+              Pack="true" PackagePath="runtimes/osx-x64/native/"
+              CopyToOutputDirectory="PreserveNewest"
+              Link="runtimes/osx-x64/native/%(Filename)%(Extension)" />
+    </ItemGroup>
+
+    <!-- MaterialX standard data libraries (XML / MTLX). RID-agnostic. -->
+    <ItemGroup>
+        <None Include="runtimes/any/native/libraries/**/*"
+              Pack="true"
+              PackagePath="runtimes/any/native/libraries/%(RecursiveDir)%(Filename)%(Extension)"
+              CopyToOutputDirectory="PreserveNewest"
+              Link="runtimes/any/native/libraries/%(RecursiveDir)%(Filename)%(Extension)" />
+    </ItemGroup>
+
+    <!-- Exclude upstream MaterialX SDK extracts from the package and the build. -->
+    <ItemGroup>
+        <None Remove="runtimes/MaterialX_*/**" />
+        <Content Remove="runtimes/MaterialX_*/**" />
+    </ItemGroup>
+
+</Project>

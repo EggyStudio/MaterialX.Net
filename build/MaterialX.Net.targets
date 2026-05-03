@@ -1,0 +1,120 @@
+<Project>
+
+  <!--
+    MaterialX.Net build/publish targets, auto-imported by every consumer of the
+    NuGet package (directly via build/ or transitively via buildTransitive/).
+    Responsibilities:
+      1. Relocate the MaterialXC native shim from the flat output root into
+         $(OutDir)runtimes/<rid>/native/.
+      2. Stage the MaterialX standard data libraries from
+         runtimes/any/native/libraries/ into $(OutDir)libraries/ and
+         $(PublishDir)libraries/ so MaterialX::loadLibraries() resolves them
+         at runtime.
+
+    Properties:
+      MaterialXRelocateNatives    (default true)  - toggle (1)
+      MaterialXCopyDataLibraries  (default true)  - toggle (2)
+  -->
+
+  <PropertyGroup>
+    <MaterialXRelocateNatives Condition="'$(MaterialXRelocateNatives)' == ''">true</MaterialXRelocateNatives>
+    <MaterialXCopyDataLibraries Condition="'$(MaterialXCopyDataLibraries)' == ''">true</MaterialXCopyDataLibraries>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(MaterialXRelocateNatives)' == 'true'">
+    <_MaterialXRid Condition="'$(RuntimeIdentifier)' != ''">$(RuntimeIdentifier)</_MaterialXRid>
+    <_MaterialXRid Condition="'$(_MaterialXRid)' == '' AND '$(NETCoreSdkPortableRuntimeIdentifier)' != ''">$(NETCoreSdkPortableRuntimeIdentifier)</_MaterialXRid>
+    <_MaterialXRid Condition="'$(_MaterialXRid)' == '' AND $([MSBuild]::IsOSPlatform('Linux'))">linux-x64</_MaterialXRid>
+    <_MaterialXRid Condition="'$(_MaterialXRid)' == '' AND $([MSBuild]::IsOSPlatform('OSX'))">osx-x64</_MaterialXRid>
+    <_MaterialXRid Condition="'$(_MaterialXRid)' == '' AND $([MSBuild]::IsOSPlatform('Windows'))">win-x64</_MaterialXRid>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MaterialXRelocateNatives)' == 'true'">
+    <_MaterialXNativeFile Include="libMaterialXC.so" />
+    <_MaterialXNativeFile Include="MaterialXC.dll" />
+    <_MaterialXNativeFile Include="libMaterialXC.dylib" />
+  </ItemGroup>
+
+  <Target Name="_MaterialXRelocateNativesAfterBuild"
+          AfterTargets="Build"
+          Condition="'$(MaterialXRelocateNatives)' == 'true' AND '$(_MaterialXRid)' != ''">
+    <PropertyGroup>
+      <_MaterialXDestDir>$([System.IO.Path]::Combine('$(OutDir)', 'runtimes', '$(_MaterialXRid)', 'native'))</_MaterialXDestDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_MaterialXNativeAtRoot Include="@(_MaterialXNativeFile->'$(OutDir)%(Identity)')" />
+      <_MaterialXNativeToMove Include="@(_MaterialXNativeAtRoot)" Condition="Exists('%(Identity)')" />
+    </ItemGroup>
+    <MakeDir Directories="$(_MaterialXDestDir)" Condition="'@(_MaterialXNativeToMove)' != ''" />
+    <Copy SourceFiles="@(_MaterialXNativeToMove)"
+          DestinationFolder="$(_MaterialXDestDir)"
+          SkipUnchangedFiles="true"
+          Condition="'@(_MaterialXNativeToMove)' != ''" />
+    <Delete Files="@(_MaterialXNativeToMove)" Condition="'@(_MaterialXNativeToMove)' != ''" />
+    <Message Importance="normal"
+             Text="MaterialX.Net: relocated @(_MaterialXNativeToMove->Count()) native shim(s) -> $(_MaterialXDestDir)"
+             Condition="'@(_MaterialXNativeToMove)' != ''" />
+  </Target>
+
+  <Target Name="_MaterialXRelocateNativesAfterPublish"
+          AfterTargets="Publish"
+          Condition="'$(MaterialXRelocateNatives)' == 'true' AND '$(_MaterialXRid)' != ''">
+    <PropertyGroup>
+      <_MaterialXPublishDestDir>$([System.IO.Path]::Combine('$(PublishDir)', 'runtimes', '$(_MaterialXRid)', 'native'))</_MaterialXPublishDestDir>
+    </PropertyGroup>
+    <ItemGroup>
+      <_MaterialXPublishedAtRoot Include="@(_MaterialXNativeFile->'$(PublishDir)%(Identity)')" />
+      <_MaterialXPublishedToMove Include="@(_MaterialXPublishedAtRoot)" Condition="Exists('%(Identity)')" />
+    </ItemGroup>
+    <MakeDir Directories="$(_MaterialXPublishDestDir)" Condition="'@(_MaterialXPublishedToMove)' != ''" />
+    <Copy SourceFiles="@(_MaterialXPublishedToMove)"
+          DestinationFolder="$(_MaterialXPublishDestDir)"
+          SkipUnchangedFiles="true"
+          Condition="'@(_MaterialXPublishedToMove)' != ''" />
+    <Delete Files="@(_MaterialXPublishedToMove)" Condition="'@(_MaterialXPublishedToMove)' != ''" />
+    <Message Importance="normal"
+             Text="MaterialX.Net: relocated @(_MaterialXPublishedToMove->Count()) native shim(s) -> $(_MaterialXPublishDestDir)"
+             Condition="'@(_MaterialXPublishedToMove)' != ''" />
+  </Target>
+
+  <!-- ============================================================
+       MaterialX standard data libraries staging.
+
+       The data ships in the package at runtimes/any/native/libraries/
+       (preserved by the runtime-asset resolver under
+       $(OutDir)runtimes/any/native/libraries/ when present).
+       Mirror them as $(OutDir)libraries/ and $(PublishDir)libraries/
+       so MaterialX's loadLibraries() finds them next to the assembly
+       at runtime.
+       ============================================================ -->
+
+  <PropertyGroup>
+    <_MaterialXDataSourceDir>$(MSBuildThisFileDirectory)..\runtimes\any\native\libraries</_MaterialXDataSourceDir>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(MaterialXCopyDataLibraries)' == 'true' AND Exists('$(_MaterialXDataSourceDir)')">
+    <_MaterialXDataFile Include="$(_MaterialXDataSourceDir)\**\*" />
+  </ItemGroup>
+
+  <Target Name="_MaterialXCopyDataLibrariesAfterBuild"
+          AfterTargets="Build"
+          Condition="'$(MaterialXCopyDataLibraries)' == 'true' AND '@(_MaterialXDataFile)' != ''">
+    <Copy SourceFiles="@(_MaterialXDataFile)"
+          DestinationFiles="@(_MaterialXDataFile->'$(OutDir)libraries\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Message Importance="low"
+             Text="MaterialX.Net: staged @(_MaterialXDataFile->Count()) data file(s) -> $(OutDir)libraries\" />
+  </Target>
+
+  <Target Name="_MaterialXCopyDataLibrariesAfterPublish"
+          AfterTargets="Publish"
+          Condition="'$(MaterialXCopyDataLibraries)' == 'true' AND '@(_MaterialXDataFile)' != ''">
+    <Copy SourceFiles="@(_MaterialXDataFile)"
+          DestinationFiles="@(_MaterialXDataFile->'$(PublishDir)libraries\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Message Importance="low"
+             Text="MaterialX.Net: staged @(_MaterialXDataFile->Count()) data file(s) -> $(PublishDir)libraries\" />
+  </Target>
+
+</Project>
+
