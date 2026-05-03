@@ -2,6 +2,11 @@
 
 # MaterialX.Net
 
+[![GitHub Packages](https://img.shields.io/badge/GitHub%20Packages-MaterialX.Net-2dba4e?logo=github)](https://github.com/EggyStudio/MaterialX.Net/packages)
+[![License: Apache-2.0](https://img.shields.io/github/license/EggyStudio/MaterialX.Net?color=brightgreen)](LICENSE)
+[![.NET 10](https://img.shields.io/badge/.NET-10.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![Platform](https://img.shields.io/badge/platform-win--x64%20%7C%20linux--x64%20%7C%20osx--x64%20%7C%20osx--arm64-informational)](#supported-runtimes)
+
 A single-package .NET binding for [MaterialX](https://materialx.org/) - the open
 standard for representing rich material and look-development content in
 computer graphics. Targets **.NET 10** and uses `LibraryImport` source-generated
