@@ -17,9 +17,22 @@ name: publish-package
 #     to a specific build-natives run id whose artifacts should be consumed.
 on:
   workflow_run:
-    workflows: [ "build-natives" ]
-    types: [ completed ]
-    branches: [ main ]
+    workflows: ["build-natives"]
+    types: [completed]
+    branches: [main]
+  # Republish whenever package-shaping inputs change on main (csproj metadata,
+  # README, logo / branding assets, or the consumer-facing .targets files).
+  # Native shims are not rebuilt here - we just reuse the latest successful
+  # build-natives artifacts.
+  push:
+    branches: [main]
+    paths:
+      - "MaterialX.Net.csproj"
+      - "README.md"
+      - ".github/assets/**"
+      - "build/**"
+      - "buildTransitive/**"
+      - ".github/workflows/publish-package.yml"
   workflow_dispatch:
     inputs:
       build_natives_run_id:
@@ -44,8 +57,8 @@ env:
 jobs:
   publish:
     # Skip auto-runs that were triggered by a failed build-natives - only
-    # workflow_dispatch and successful upstream runs should publish.
-    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    # workflow_dispatch, push, and successful upstream runs should publish.
+    if: ${{ github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5

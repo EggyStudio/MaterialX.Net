@@ -31,12 +31,14 @@
         <PackageLicenseExpression>Apache-2.0</PackageLicenseExpression>
         <PackageTags>materialx;shading;usd;hydra;pbr;native</PackageTags>
         <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageIcon>logo.png</PackageIcon>
         <Deterministic>true</Deterministic>
     </PropertyGroup>
 
     <!-- Branding / docs -->
     <ItemGroup>
         <None Include="README.md" Pack="true" PackagePath="/" />
+        <None Include=".github/assets/*" Pack="true" PackagePath="/" Visible="true" />
     </ItemGroup>
 
     <!-- Ship the native-relocation MSBuild logic to consumers.
