@@ -1,4 +1,4 @@
-![header.png](.github/assets/header.png)
+![header.png](https://raw.githubusercontent.com/EggyStudio/MaterialX.Net/refs/heads/main/.github/assets/header.png)
 
 # MaterialX.Net
 
